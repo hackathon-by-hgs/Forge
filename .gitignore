@@ -54,3 +54,12 @@ pids
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# AI tool files
+.claude/
+AGENTS.md
+AGENT.md
+CLAUDE.md
+CLAUDE.local.md
+CODEX.md
+.openai/

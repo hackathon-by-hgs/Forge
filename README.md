@@ -1,75 +1,102 @@
-# Forge — Backend (NestJS)
+# Forge backend
 
-Backend for the Forge worker mobile app, drafted from the contracts in `endpoint_resources/`. Built on NestJS 11, Prisma 6 (PostgreSQL), JWT auth, and `@nestjs/swagger` for OpenAPI docs.
+The Forge API. It serves the worker app and the employer and bank dashboards: phone and email sign-in, jobs and work sessions, wallets and withdrawals, loans, employer payments, uploads, push notifications and live updates. Payments run through Squad.
 
-## Quick start
+This repository is the `backend` branch of the Forge remote. The worker app is the sibling `mobile` clone and the web dashboards are the sibling `frontend` clone.
+
+## Stack
+
+NestJS 11, Prisma 7 with PostgreSQL through the `pg` adapter, JWT auth with argon2 hashing, class-validator for request bodies, and Swagger for the docs. The API listens on port 3000 and every route sits under `/v1`, except `/docs` and `/health`.
+
+## Setup
+
+You need Node 20 or newer, pnpm 9 and PostgreSQL.
 
 ```bash
-# 1. Install
+git clone --branch backend --single-branch https://github.com/hackathon-by-hgs/Forge.git backend
+cd backend
 pnpm install
-
-# 2. Bring up Postgres (or set DATABASE_URL to your own)
-docker compose -f ../docker-compose.yml up -d
-
-# 3. Apply schema (creates tables in the dev DB)
-pnpm exec prisma migrate dev --name init
+cp .env.example .env
 pnpm exec prisma generate
-
-# 4. Run
-pnpm run start:dev
+pnpm exec prisma migrate dev
+pnpm db:seed
+pnpm start:dev
 ```
 
-- API base:  `http://localhost:3000/v1`
+Before the migration step, create the database and role named in `DATABASE_URL`, and set `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` in `.env`.
+
+- API: `http://localhost:3000/v1`
 - Swagger UI: `http://localhost:3000/docs`
-- Health:    `http://localhost:3000/health`
+- Health: `http://localhost:3000/health`
 
-## Module map
-
-| Module | Files | Endpoints (spec ref) |
-|--------|-------|----------------------|
-| `AuthModule`   | `modules/auth/*`    | `01_auth.md` |
-| `JobsModule`   | `modules/jobs/*`    | `02_jobs_feed.md`, `03_job_detail.md`, `04_apply_for_job.md`, `05_application_status.md`, `06_my_applications.md`, `07_work_session.md`, `20_work_history.md` (reuses applications) |
-| `WalletModule` | `modules/wallet/*`  | `08_earnings_home.md` (reuses `/me`), `09_transactions.md`, `10_transaction_detail.md`, `11_withdraw.md`, `12_bank_accounts.md` |
-| `LoansModule`  | `modules/loans/*`   | `13_loans_home.md`, `14_loan_apply.md`, `15_loan_detail.md` |
-| `MeModule`     | `modules/me/*`      | `16_profile.md`, `17_edit_profile.md`, `18_settings.md`, `19_notifications.md` |
-| `SupportModule`| `modules/support/*` | `21_help_support.md`, `22_uploads.md` |
-
-Cross-cutting bits live under `common/`:
-
-- `filters/http-exception.filter.ts` — single error envelope `{ error: { code, message, details? } }`.
-- `decorators/idempotency-key.decorator.ts` + `interceptors/idempotency.service.ts` — DB-backed 24h idempotency cache for ⚡ endpoints.
-- `pagination/cursor.util.ts` — opaque base64 cursor `{ts, id}`.
-- `guards/jwt-auth.guard.ts` + `modules/auth/strategies/jwt.strategy.ts` — Bearer JWT auth.
-- `utils/geo.ts` — haversine + Lagos-realistic walking/driving paces.
-- `utils/ids.ts` — `<prefix>_<8 base32>` ids.
-
-## Auth
-
-- `Authorization: Bearer <access_token>` on every protected endpoint.
-- Access tokens last 15 min, refresh tokens 30 days. Refresh is single-use; on reuse, every refresh for the worker is revoked (defensive).
-- OTP codes are 6 digits, hashed with argon2. In dev with `OTP_DEBUG_EXPOSE=true`, the code is logged to stdout (no SMS provider wired yet — TODO Termii / Twilio).
-
-## Idempotency
-
-⚡ endpoints (`POST /auth/profile-setup`, `POST /jobs/:id/apply`, `POST /sessions`, `POST /sessions/:id/clock-out`, `POST /wallet/withdrawals`, `POST /me/bank-accounts`, `POST /loans`) require an `Idempotency-Key` header (UUID v4). Replays return the cached response for 24 h. Same key with a different body returns `409 CONFLICT`.
-
-## Stubs you'll want to swap
-
-| Concern | File | Note |
-|---------|------|------|
-| SMS dispatch (OTP) | `modules/auth/auth.service.ts` (`requestOtp`) | currently logs the code |
-| NIBSS account-name resolve | `modules/wallet/banks.service.ts` (`resolve`) | returns `TEST ACCOUNT NAME` |
-| Squad disbursement (clock-out) | `modules/jobs/sessions.service.ts` (`clockOut`) | synchronous "succeeds immediately" |
-| Squad withdrawal | `modules/wallet/withdrawals.service.ts` (`withdraw`) | creates a `pending` txn; webhook → `succeeded` not implemented |
-| Push notifications (FCM/APNs) | several `// TODO` markers | device tokens are persisted; sender not wired |
-| Image moderation (Rekognition / Sightengine) | `modules/me/me.service.ts` (`edit`), `modules/jobs/sessions.service.ts` (`clockOut`) | upload acceptance currently has no moderation step |
-
-## Useful commands
+Docker builds an image and runs it on port 8080 with your `.env` and an uploads volume. It does not start PostgreSQL.
 
 ```bash
-pnpm exec prisma studio               # browse the DB
-pnpm exec prisma migrate dev          # create + run a new migration
-pnpm exec prisma migrate reset        # nuke + reseed (dev only)
-pnpm run build                        # tsc + nest build
-pnpm exec tsc --noEmit                # type-check only
+docker compose up --build
 ```
+
+## Route groups
+
+| Prefix | What it covers |
+| --- | --- |
+| `auth` | Worker sign-in with a phone code, tokens and profile setup. |
+| `dashboard/auth` | Sign-in for the employer and bank dashboards. |
+| `me`, `settings`, `notifications`, `help`, `uploads` | Worker profile, settings, notifications, help and support, and file uploads. |
+| `jobs`, `applications`, `sessions` | The job feed, applying, and work sessions with clock in and clock out. |
+| `wallet/withdrawals`, `transactions`, `bank`, `loans` | Earnings, withdrawals, bank accounts and loans. |
+| `employers`, `employer/*` | The employer API: jobs, workers, work sessions, payouts, invoices, transactions, credit, loans and analytics. |
+| `search`, `ai` | Search, job recommendations and job summaries. |
+| `stream` | Live updates. |
+| `webhooks/squad` | Squad payment webhooks. |
+
+## Auth and safe retries
+
+Protected routes take `Authorization: Bearer <access token>`. Access tokens last 15 minutes and refresh tokens 30 days, set by `JWT_ACCESS_TTL` and `JWT_REFRESH_TTL`. Phone codes expire after 5 minutes, can be resent after 30 seconds and allow 5 attempts.
+
+Money and state-changing routes accept an `Idempotency-Key` header. A repeated key replays the stored response for 24 hours, so a retry on a bad network cannot charge twice. Errors share one shape, `{ "error": { "code", "message", "details" } }`.
+
+## Integrations
+
+Each integration switches on when its key is present and falls back to a stub when it is not, so the API runs locally with no third-party accounts. Set `<NAME>_PROVIDER` to force a choice.
+
+| Integration | Real when set | Without it |
+| --- | --- | --- |
+| Payments, payouts and SMS codes (Squad) | `SQUAD_SECRET_KEY` | Stub. |
+| Email (Resend) | `EMAIL_API_KEY` | Stub. |
+| File storage (Cloudflare R2) | `R2_ACCESS_KEY_ID` | Local disk in `UPLOAD_DIR`. |
+| Liveness check (Smile ID) | `SMILE_PARTNER_ID` | Stub that passes every request. Do not run this in production. |
+| Push notifications (Firebase Cloud Messaging) | `FCM_SERVICE_ACCOUNT_JSON` or `FCM_PRIVATE_KEY` | Stub. |
+| Job summaries (Anthropic) | `ANTHROPIC_API_KEY` | Stub. |
+| Job recommendations (Gemini) | `GEMINI_API_KEY` | Stub. |
+
+## Environment
+
+`.env.example` lists the core settings. The code reads more, so check `src/config/configuration.ts` for the full list.
+
+| Variable | What it does |
+| --- | --- |
+| `NODE_ENV`, `PORT` | Environment and port. The port defaults to 3000. |
+| `DATABASE_URL` | PostgreSQL connection string. |
+| `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | Signing secrets for worker tokens. `USER_JWT_*` does the same for dashboard users. |
+| `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL` | Token lifetimes in seconds. |
+| `OTP_TTL_SECONDS`, `OTP_RESEND_COOLDOWN_SECONDS`, `OTP_MAX_ATTEMPTS` | Phone code rules. |
+| `OTP_DEBUG_EXPOSE` | When true, the code can be read from `/auth/otp/debug/:id`. Development and staging only. |
+| `UPLOAD_DIR`, `UPLOAD_PUBLIC_BASE_URL`, `UPLOAD_TTL_HOURS` | Local upload settings. |
+| `GEOFENCE_DEFAULT_RADIUS_M` | Clock-in radius for a job that sets none. Defaults to 200 metres. |
+| `WITHDRAWAL_MIN_NAIRA`, `WITHDRAWAL_FLAT_FEE_NAIRA` | Withdrawal minimum and fee. |
+| `CORS_ORIGINS`, `COOKIE_*` | Allowed browser origins and cookie settings for the dashboards. |
+| `APP_BASE_URL`, `EMPLOYER_APP_BASE_URL`, `BANK_APP_BASE_URL` | Public addresses used in links and emails. |
+
+## Scripts
+
+| Command | What it does |
+| --- | --- |
+| `pnpm start:dev` | Runs the API with reload. |
+| `pnpm build` | Builds into `dist`. |
+| `pnpm start:prod` | Applies migrations, then runs the built API. |
+| `pnpm lint` | ESLint, with fixes. |
+| `pnpm test` | Unit tests. `pnpm test:e2e` runs the end-to-end test and `pnpm test:cov` adds coverage. |
+| `pnpm db:push` | Pushes the schema straight to the database. Local use only. |
+| `pnpm db:seed` | Loads the seed data. |
+| `pnpm db:reset` | Wipes the database and seeds it again. Local use only. |
+| `pnpm exec prisma studio` | Opens Prisma Studio to browse the data. |
