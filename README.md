@@ -19,3 +19,14 @@ git clone --branch backend --single-branch https://github.com/hackathon-by-hgs/F
 ```
 
 Then follow the README inside each folder. Run git, installs, tests and commits inside the folder that owns the change, never from this root.
+
+## Contributors
+
+Forge was built by the team below. The web apps and the API started as the separate `forge_fe` and `forge_be` repositories, and their history is kept on the `frontend` and `backend` branches.
+
+| Contributor | Worked on |
+| --- | --- |
+| [Maxima24](https://github.com/Maxima24) | Web apps and API |
+| [willy264](https://github.com/willy264) | Web apps |
+| [professor-12](https://github.com/professor-12) | Web apps |
+| [Ferousco-dev](https://github.com/Ferousco-dev) and [ferousco](https://github.com/ferousco) | Mobile app |
