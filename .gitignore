@@ -44,3 +44,11 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# AI tool files
+AGENTS.md
+AGENT.md
+CLAUDE.md
+CLAUDE.local.md
+CODEX.md
+.openai/

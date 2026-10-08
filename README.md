@@ -1,300 +1,88 @@
-# Forge
+# Forge mobile
 
-> Find work nearby, clock in with GPS, get paid the moment you clock out, build credit that banks recognise.
+The Forge worker app. Workers find jobs near them, clock in with GPS, get paid the moment they clock out, and build a credit record that banks recognise. It is built for Nigeria's blue-collar gig workforce: loaders, drivers, unloaders, welders and general labour.
 
-## Releases
+This repository is the `mobile` branch of the Forge remote. The API is the sibling `backend` clone and the web dashboards are the sibling `frontend` clone.
 
-- Android APK:
-  https://github.com/Ferousco-dev/Forge/releases/download/v1.0.0/app-arm64-v8a-release.apk
-
-- All releases:
-  https://github.com/Ferousco-dev/Forge/releases
-
-Forge is a Flutter mobile app for Nigeria's blue-collar gig workforce — loaders, drivers, unloaders, welders, general labour. Workers find jobs near them, the app verifies they actually showed up, employers can't ghost them, payment lands instantly via Squad, and every completed shift becomes part of a portable credit record that unlocks loans.
-
----
+Android build: [app-arm64-v8a-release.apk](https://github.com/Ferousco-dev/Forge/releases/download/v1.0.0/app-arm64-v8a-release.apk). All builds are on the [releases page](https://github.com/Ferousco-dev/Forge/releases).
 
 ## What it does
 
-| Surface | What's in it |
-|---|---|
-| **Onboarding** | Phone OTP (SMS / WhatsApp / push) → liveness selfie → name, photo, bank link |
-| **Jobs feed** | Map-based, location-aware, silent background refresh every 40s, filter by trade or best pay |
-| **Apply** | One-tap apply, real-time status, withdraw if you change your mind |
-| **Active jobs** | Multi-session aware — accepted, en route, on the clock, awaiting confirm, all visible |
-| **Clock-in** | 100m GPS geofence; "Come back in X min" countdown if the job hasn't started yet |
-| **Work timer** | Live ticker, minimum 5-minute shift enforced server-side |
-| **Clock-out** | Camera proof photo + GPS coords + accuracy check |
-| **Pending review** | Employer-signed payout window with live release-time countdown |
-| **Earnings** | Wallet balance, week / month / all-time totals, transaction feed |
-| **Withdraw** | NIBSS bank transfer, ~5 min landing time |
-| **Loans** | AI credit score, eligibility unlocks at 3 completed jobs, auto-repay from future earnings |
-| **Profile** | Work history, bookmarks, notifications, help & support, settings, data export |
+| Area | What is in it |
+| --- | --- |
+| Sign up | Phone code by SMS, WhatsApp or push, then a liveness selfie, name, photo and bank link. |
+| Jobs | A map and list of jobs near the worker, refreshed quietly every 40 seconds, filtered by trade or best pay. |
+| Apply | One tap to apply, live status, and withdraw before the job starts. |
+| Work | Clock in inside the job's GPS fence (each job sets its radius), a live timer, then clock out with a proof photo and a GPS accuracy check. |
+| Pay | The employer signs off in a payout window, then the money lands in the wallet. Withdraw to a bank by NIBSS transfer. |
+| Loans | An AI credit score, eligibility after 3 completed jobs, and repayment taken from future earnings. |
+| Profile | Work history, saved jobs, notifications, help and support, settings and a data export. |
 
----
+A work session moves through `accepted`, `arriving`, `working`, `reviewing`, `submitting`, `pending_review` and `done`. Each phase is saved in secure storage, so a restart picks up where the worker left off. Sessions are keyed by job, so a worker can have several in flight at once.
 
-## The work-session state machine
+## Stack
 
-Every session moves through these phases. Each phase is persisted in secure storage so a cold-start picks back up where the worker left off:
+Flutter with Dart 3.10.8 or newer, one codebase for Android and iOS. Riverpod for state and go_router for navigation, with a stateful shell so each tab keeps its own history. Firebase Cloud Messaging with local notifications for push, Google Maps with an OpenStreetMap fallback (flutter_map), geolocator and geocoding for location, image_picker for photos, flutter_secure_storage for tokens, and printing for receipts.
 
-```
-accepted → arriving → working → reviewing → submitting → pending_review → done
-```
+## Setup
 
-- **accepted** — employer said yes, worker hasn't moved
-- **arriving** — clock-in screen open, worker heading to site
-- **working** — clocked in, timer running
-- **reviewing** — proof photo captured, worker confirming before submit
-- **submitting** — upload + clock-out request in flight
-- **pending_review** — server holding payment in employer-signed window
-- **done** — paid, session complete
-
-Workers can have multiple sessions in flight simultaneously (one waiting on confirm, another freshly accepted, etc.). Sessions are keyed by job ID — applying to a new job never overwrites another job's session.
-
----
-
-## Tech stack
-
-| Layer | Choice | Why |
-|---|---|---|
-| UI | Flutter 3.x (single codebase, Android + iOS) | Two stores, one team |
-| State | Riverpod 2.6 | Immutable, testable, no codegen required |
-| Routing | go_router with `StatefulShellRoute.indexedStack` | Per-tab navigation history survives tab switches |
-| Auth | Phone OTP via the Forge backend (no email, no password) | Realistic for the target user |
-| Push | Firebase Cloud Messaging + flutter_local_notifications | Custom Android channels per kind, deep-link routing |
-| Maps | Google Maps Flutter, flutter_map (OSM) fallback | Works even if the Maps key is rate-limited |
-| Camera | image_picker + camera | Liveness selfie + clock-out proof |
-| Location | geolocator + geocoding | Geofence verification + nearby jobs query |
-| Storage | flutter_secure_storage | Keychain on iOS, EncryptedSharedPreferences on Android |
-| Payments | Squad (payouts) + NIBSS (bank withdraw) | Domestic processors, instant settlement |
-| PDF | printing | Earnings receipts, data export |
-| Analytics | Firebase Analytics | |
-
----
-
-## Project structure
-
-```
-lib/
-├── main.dart                      # Entry — Firebase init, error handler, notifications
-├── app.dart                       # Root MaterialApp with theme + router
-├── firebase_options.dart          # Generated by flutterfire configure
-│
-├── app/
-│   ├── router/
-│   │   ├── app_router.dart        # Full route tree, auth guard
-│   │   ├── home_shell.dart        # Bottom-nav shell, slides nav off on subroutes
-│   │   └── route_paths.dart       # String constants for every route
-│   └── theme/                     # AppColors, AppSpacing, AppRadius, AppTextStyles
-│
-├── core/
-│   ├── api/                       # ApiClient, ApiException, idempotency, config
-│   ├── notifications/             # NotificationsService, FCM listeners, deeplink stream
-│   ├── location/                  # currentLocationProvider, haversine distance
-│   ├── storage/                   # SessionStorage (secure)
-│   ├── uploads/                   # Upload handle + proof-photo flow
-│   ├── ai/                        # AI repository (credit scoring, voice search hooks)
-│   ├── mock/                      # Domain models + mock providers
-│   └── performance/               # ViewportAwareWidget, RepaintBoundary helpers
-│
-├── features/
-│   ├── auth/                      # Splash → login/signup → OTP → onboarding → permissions
-│   ├── jobs/                      # Feed, map, detail, search, apply, applications list
-│   ├── work/                      # Clock-in, work-in-progress, clock-out, submit, complete
-│   ├── earnings/                  # Wallet, transactions, withdraw, receipts, banks
-│   ├── loans/                     # Credit score, eligibility, apply, repayment history
-│   ├── profile/                   # Profile, edit, work history, help, settings, data export
-│   ├── bookmarks/                 # Saved jobs
-│   ├── employers/                 # Employer profile (read-only on worker side)
-│   └── splash/                    # Brand wordmark + session restore gate
-│
-└── shared/widgets/                # AppCard, PrimaryButton, CurrencyText, OtpInput, etc.
-
-endpoint_resources/                # API contract — every screen has a matching .md
-android/                           # Native config, manifest, signing
-ios/                               # Runner project, Info.plist, signing
-```
-
----
-
-## Getting started
-
-### Prerequisites
-
-- Flutter 3.x
-- Dart 3.x
-- Xcode 14+ (iOS builds)
-- Android Studio (Android builds)
-- CocoaPods (iOS)
-- A Firebase project with FCM enabled
-
-### Setup
+You need Flutter, Android Studio for Android builds, and Xcode with CocoaPods for iOS builds.
 
 ```bash
-git clone https://github.com/Ferousco-dev/Forge.git
-cd Forge
+git clone --branch mobile --single-branch https://github.com/hackathon-by-hgs/Forge.git mobile
+cd mobile
 flutter pub get
-flutterfire configure          # generates firebase_options.dart
 flutter run
 ```
 
-### Firebase configuration
+The Firebase files for the Forge project are committed: `android/app/google-services.json`, `ios/Runner/GoogleService-Info.plist` and `lib/firebase_options.dart`. To use your own Firebase project, replace them (or run `flutterfire configure`) and enable Cloud Messaging.
 
-1. Create a project at console.firebase.google.com
-2. Enable **Cloud Messaging** (required), **Analytics** (optional)
-3. Download:
-   - `GoogleService-Info.plist` → `ios/Runner/`
-   - `google-services.json` → `android/app/`
-4. Run `flutterfire configure` to wire up `firebase_options.dart`
+## Configuration
 
-### Backend / API
-
-The app talks to a Forge backend (separate repository) over HTTPS. Configure the base URL in `lib/core/api/api_config.dart`. The full request/response contract for every endpoint lives in `endpoint_resources/` — start at `00_README.md`.
-
-### Google Maps key
-
-The Android manifest currently ships a development Maps key in [`android/app/src/main/AndroidManifest.xml`](android/app/src/main/AndroidManifest.xml). Replace it with your own restricted key before building for release. If the key is missing or rate-limited the app falls back to OpenStreetMap automatically (toggle `useGoogleMaps` in [`lib/features/jobs/widgets/map_view.dart`](lib/features/jobs/widgets/map_view.dart) to force OSM).
-
----
-
-## Permissions
-
-| Permission | Used for | Required? |
-|---|---|---|
-| Internet, Network state | API calls, offline detection | Install-time |
-| Fine + Coarse Location | Jobs feed, geofence, clock-out GPS proof | Required to clock in |
-| Camera | Liveness selfie at signup, clock-out proof | Required to complete a shift |
-| Photo library | Edit-profile avatar picker | Optional |
-| Post notifications (Android 13+) | Job alerts, payment confirms, loan decisions | Optional but recommended |
-| Vibrate | Notification haptics | Install-time |
-
-Permission prompts fire from the dedicated screens under [`features/auth/presentation/permissions/`](lib/features/auth/presentation/permissions). For returning users on a fresh install, the OTP screen routes through the notification permission gate post-verify so push doesn't silently fail.
-
----
+| Setting | Where | Notes |
+| --- | --- | --- |
+| API address | `lib/core/api/api_config.dart` | Points at the deployed API, `https://forgebe-production.up.railway.app/v1`. For the local `backend` clone use `http://localhost:3000/v1`, or `http://10.0.2.2:3000/v1` from an Android emulator. |
+| Google Maps key | `android/app/src/main/AndroidManifest.xml` | A development key is committed. Replace it with your own restricted key before a release. |
 
 ## API contract
 
-Every screen has a corresponding markdown file in `endpoint_resources/` describing the exact request/response shape. The mobile parses tolerantly — snake_case (per spec) AND camelCase (current backend) work side by side.
+`endpoint_resources/` has one file per screen with the exact request and response shape. Start with `00_README.md` for the envelope, paging and error format. The app reads both snake_case and camelCase fields.
 
-Key references:
+## Permissions
 
-- `00_README.md` — envelope shape, pagination, error format
-- `01_auth.md` — phone OTP request + verify
-- `02_jobs_feed.md` — nearby + all jobs
-- `04_apply_for_job.md` — apply / withdraw
-- `07_work_session.md` — clock-in / clock-out
-- `08_earnings_home.md`, `09_transactions.md` — wallet
-- `13_loans_home.md`, `14_loan_apply.md`, `15_loan_detail.md` — credit + loans
-- `19_notifications.md`, `24_push_notifications.md`, `24b_fcm_and_otp_channels.md` — push + OTP delivery
-- `22_uploads.md`, `23_liveness.md` — proof photos + liveness
-- `26_employer_signed_payouts.md` — pending-review window
+| Permission | Used for |
+| --- | --- |
+| Location | The jobs feed, the clock-in fence and the clock-out GPS proof. Needed to clock in. |
+| Camera | The liveness selfie and the clock-out proof photo. Needed to finish a shift. |
+| Photo library | Choosing a profile photo. Optional. |
+| Notifications | Job alerts, payment confirmations and loan decisions. Optional. |
 
----
+## Code layout
 
-## Build & deploy
-
-### Debug
-
-```bash
-flutter run -d android
-flutter run -d ios
+```text
+lib/app/          router, bottom navigation shell, theme
+lib/core/         API client, notifications, location, storage, uploads, AI hooks, mock data
+lib/features/     auth, jobs, work, earnings, loans, profile, bookmarks, employers, splash
+lib/shared/       shared widgets
+endpoint_resources/   API contract, one file per screen
 ```
 
-### Release
+## Commands
 
-```bash
-# Android
-flutter build appbundle --release      # upload to Play Console
-flutter build apk --release            # sideload / firebase distribution
+| Command | What it does |
+| --- | --- |
+| `flutter run` | Runs on the connected device or emulator. |
+| `flutter analyze` | Lints. Keep it at zero warnings. |
+| `flutter test` | Runs `test/widget_test.dart`, which opens every route to check nothing crashes. |
+| `dart format lib/` | Formats the code. |
+| `flutter build appbundle --release` | Android bundle for the Play Console. |
+| `flutter build apk --release` | Android APK for sideloading. |
+| `flutter build ipa --release` | iOS archive for App Store Connect. |
 
-# iOS
-flutter build ipa --release            # upload via Transporter / Xcode
-```
-
-Versioning lives in `pubspec.yaml`. Bump the `version:` line before each release; the format is `<semver>+<build_number>`.
-
----
-
-## Testing
-
-```bash
-flutter test                    # smoke + unit
-flutter analyze                 # lints (must stay zero warnings)
-dart format lib/                # before every PR
-```
-
-`test/widget_test.dart` walks every static and parameterized route to confirm nothing crashes on mount. Add feature-level tests under `test/features/<area>/`.
-
----
-
-## Performance
-
-The app is structured to keep frame time low on mid-tier Android:
-
-- `RepaintBoundary` on the jobs map, draggable sheet header, splash wordmark, active-session dot
-- `ValueNotifier` for sheet drag position so the map and list don't rebuild on drag
-- 1Hz timers for work elapsed / countdown — never per-frame
-- `AsyncValue.when(skipLoadingOnRefresh: true)` so background refreshes don't flash skeletons
-- Silent jobs-feed refresh every 40s, paused on app background via `WidgetsBindingObserver`
-- Single-pass scans for totals and best-pay picking (no list-copy + sort where avoidable)
-
-See `PERFORMANCE_OPTIMIZATION.md` for deeper notes.
-
----
-
-## Security
-
-- All API calls over HTTPS only, no `NSAllowsArbitraryLoads`
-- Refresh token in Keychain / EncryptedSharedPreferences, never in memory beyond use, never in shared prefs plain
-- Access token in memory only
-- Idempotency keys on every payment-adjacent call (clock-in, clock-out, withdraw, loan apply) so retries during flaky network can't double-charge
-- Server-authoritative state machine — the client cannot skip a phase
-- GDPR / NDPR-aligned data export and account deletion in `Profile → Manage data`
-
----
+Set the version in `pubspec.yaml` before each release, in the form `<semver>+<build number>`.
 
 ## Known gaps
 
-- **Voice search** is stubbed (mic icon shows "coming soon") pending upstream fix for the `record` package's platform-interface version mismatch.
-- **Localization** scaffold is in place but only English is shipped today. Yoruba, Hausa, Igbo are on the roadmap.
-- **Employer-side app** is a separate project — this repo is worker-only.
-- **Some profile sub-routes** (Employers detail tail) still render the `PlaceholderScreen`. Replace before public release.
-
----
-
-## Contributing
-
-1. Branch: `git checkout -b feat/<short-name>` or `fix/<short-name>`
-2. Code: follow existing style — no comments unless the *why* is non-obvious, no dead exports, no magic numbers
-3. Verify: `flutter analyze` must be clean; `flutter test` must pass
-4. Commit: conventional commits (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`)
-5. PR: small, focused, with a clear "what changed and why"
-
----
-
-## Team
-
-- **Product:** SQUAD Co
-- **Engineering:** Ferousco Dev
-
-## Support
-
-- Inline code comments for the non-obvious bits
-- `endpoint_resources/` for the API contract
-- `PERFORMANCE_OPTIMIZATION.md` for perf deep-dives
-- `OPTIMIZATION_SUMMARY.md` for the change log of perf work
-
----
-
-## Links
-
-- [Flutter](https://docs.flutter.dev/)
-- [Riverpod](https://riverpod.dev/)
-- [go_router](https://pub.dev/packages/go_router)
-- [FlutterFire](https://firebase.flutter.dev/)
-- [Squad payments](https://squadco.com/)
-
----
-
-**Version:** 1.0.0  
-**Last updated:** 2026-05-14
+- Voice search is not built yet. The mic icon says it is coming soon.
+- Only English is shipped.
+- This app is for workers. Employers use the web dashboards in the `frontend` branch.
