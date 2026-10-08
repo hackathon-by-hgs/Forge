@@ -29,4 +29,4 @@ Forge was built by the team below. The web apps and the API started as the separ
 | [Maxima24](https://github.com/Maxima24) | Web apps and API |
 | [willy264](https://github.com/willy264) | Web apps |
 | [professor-12](https://github.com/professor-12) | Web apps |
-| [Ferousco-dev](https://github.com/Ferousco-dev) and [ferousco](https://github.com/ferousco) | Mobile app |
+| [Ferousco-dev](https://github.com/Ferousco-dev) | Mobile app |
