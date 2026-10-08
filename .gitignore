@@ -40,3 +40,12 @@ coverage
 
  *PROMPT.md
  *REPLY.md
+
+# AI tool files
+.claude/
+AGENTS.md
+AGENT.md
+CLAUDE.md
+CLAUDE.local.md
+CODEX.md
+.openai/
